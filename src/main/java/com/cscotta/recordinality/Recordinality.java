@@ -16,37 +16,34 @@
 
 package com.cscotta.recordinality;
 
+import com.cscotta.recordinality.HashingWrapperFactory.HashingWrapper;
+
 import java.util.Set;
-import java.util.Random;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.hash.Hashing;
-import com.google.common.hash.HashFunction;
 import com.google.common.collect.ImmutableSet;
 
 public class Recordinality {
 
     private final int sampleSize;
-    private final int seed = new Random().nextInt();
-    private final HashFunction hash = Hashing.murmur3_128(seed);
+    private HashingWrapper hash;
     private final AtomicLong modifications = new AtomicLong(0);
     private final AtomicLong cachedMin = new AtomicLong(Long.MIN_VALUE);
     private final ConcurrentSkipListMap<Long, Element> kMap =
         new ConcurrentSkipListMap<Long, Element>();
     private volatile int kMapSize = 0;
 
-    /*
-     * Initializes a new Recordinality instance with a configurable 'k'-size.
-     */
-    public Recordinality(int sampleSize) {
+    public Recordinality(Class klass, int sampleSize)
+    {
         this.sampleSize = sampleSize;
+        this.hash = HashingWrapperFactory.newHashingWrapper(klass);
     }
 
     /*
      * Observes a value in a stream.
      */
-    public void observe(String element) {
+    public void observe(Object element) {
         boolean inserted = insertIfFits(element);
         if (inserted) modifications.incrementAndGet();
     }
@@ -84,8 +81,8 @@ public class Recordinality {
     /*
      * Inserts a record into our k-set if it fits.
     */
-    private boolean insertIfFits(String element) {
-        long hashedValue = hash.hashString(element).asLong();
+    private boolean insertIfFits(Object element) {
+        long hashedValue = hash.hash(element).asLong();
 
         // Short-circuit if our k-set is saturated. Common case.
         if (hashedValue < cachedMin.get() && kMapSize >= sampleSize)
@@ -141,10 +138,10 @@ public class Recordinality {
      */
     public class Element {
 
-        public final String value;
+        public final Object value;
         public final AtomicLong count;
 
-        public Element(String value) {
+        public Element(Object value) {
             this.value = value;
             this.count = new AtomicLong(1);
         }
